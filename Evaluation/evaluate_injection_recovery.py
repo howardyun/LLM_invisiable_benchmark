@@ -47,7 +47,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--success-threshold",
         type=float,
-        default=0.5,
+        default=0.1,
         help="将解析成功定义为恢复完整度达到该阈值，默认 0.5",
     )
     return parser.parse_args()

@@ -2,6 +2,7 @@ Data_Source
 Demo_data
 /Parser/LangChain/PDF Loader/Output_new/
 /Dataset/
-/Parser/BatchParseResult/
+/Parser/BatchParseResult/*
+!/Parser/BatchParseResult/run_summary.json
+!/Parser/BatchParseResult/benchmark_summary.json
 /Parser/**/*.yml
-/Evaluation/results/
