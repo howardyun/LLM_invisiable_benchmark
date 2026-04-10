@@ -6,3 +6,4 @@ Demo_data
 !/Parser/BatchParseResult/run_summary.json
 !/Parser/BatchParseResult/benchmark_summary.json
 /Parser/**/*.yml
+/.idea/
