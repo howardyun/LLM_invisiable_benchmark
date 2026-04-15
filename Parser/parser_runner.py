@@ -62,8 +62,6 @@ PARSER_SPECS: tuple[ParserSpec, ...] = (
     ParserSpec("langchain.unstructured_fast", "langchain", "LangChain", BASE_DIR / "LangChain" / "PDF Loader" / "Unstructured.py", "UnstructuredLoader_fast.txt", extra_args=("--strategy", "fast")),
     ParserSpec("langchain.unstructured_hi_res", "langchain", "LangChain", BASE_DIR / "LangChain" / "PDF Loader" / "Unstructured.py", "UnstructuredLoader_hi_res.txt", extra_args=("--strategy", "hi_res")),
     ParserSpec("langchain.unstructured_ocr_only", "langchain", "LangChain", BASE_DIR / "LangChain" / "PDF Loader" / "Unstructured.py", "UnstructuredLoader_ocr_only.txt", extra_args=("--strategy", "ocr_only")),
-    ParserSpec("langchain.pypdfdirectory", "langchain", "LangChain", BASE_DIR / "LangChain" / "PDF Loader" / "PyPDFDirectory.py", "PyPDFDirectoryLoader.txt", input_mode="directory"),
-
     ParserSpec("llamaindex.pymupdf", "llamaindex", "LlamaIndex-base", BASE_DIR / "LlamaIndex" / "PDF Reader" / "PyMuPDFLoader.py", "PyMuPDFLoader.txt"),
     ParserSpec("llamaindex.pdfloader", "llamaindex", "LlamaIndex-base", BASE_DIR / "LlamaIndex" / "PDF Reader" / "PDFLoader.py", "StandardPDF.txt"),
     ParserSpec("llamaindex.unstructured", "llamaindex", "LlamaIndex-base", BASE_DIR / "LlamaIndex" / "PDF Reader" / "UnstructuredLoader.py", "UnstructuredLoader.txt"),
@@ -196,7 +194,12 @@ def build_command(spec: ParserSpec, input_target: Path, output_path: Path, use_c
         # 加上 --no-capture-output 让输出直接由子进程处理，避免卡住。
         base_cmd = ["conda", "run", "--no-capture-output", "-n", spec.env_name, python_cmd]
 
-    return base_cmd + [str(spec.script_path.name), "-i", str(input_target), "-o", str(output_path), *spec.extra_args]
+    command = base_cmd + [str(spec.script_path.name), "-i", str(input_target), "-o", str(output_path), *spec.extra_args]
+
+    if input_target.is_dir() and spec.framework in {"langchain", "haystack", "docling", "llamaindex", "llmsherpa"} and spec.id != "langchain.pypdfdirectory":
+        command.extend(["--output-name", spec.output_name])
+
+    return command
 
 
 def strip_metadata_from_text(text: str) -> str:
@@ -285,11 +288,21 @@ def run_single_task(
     use_current_python: bool,
     include_metadata: bool,
     dry_run: bool,
+    task_index: int | None = None,
+    task_total: int | None = None,
+    parser_index: int | None = None,
+    parser_total: int | None = None,
 ) -> dict:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     command = build_command(spec, input_target, output_path, use_current_python)
 
-    print(f"\n[{spec.id}]")
+    progress_prefix = ""
+    if task_index is not None and task_total is not None:
+        progress_prefix += f"[task {task_index}/{task_total}] "
+    if parser_index is not None and parser_total is not None:
+        progress_prefix += f"[parser {parser_index}/{parser_total}] "
+
+    print(f"\n{progress_prefix}[{spec.id}]")
     print(f"  env      : {spec.env_name}")
     print(f"  input    : {input_target}")
     print(f"  output   : {output_path}")
@@ -307,6 +320,7 @@ def run_single_task(
             "returncode": None,
             "duration_seconds": 0.0,
             "output_exists": False,
+            "input_mode": spec.input_mode,
         }
 
     start = time.perf_counter()
@@ -350,7 +364,33 @@ def run_single_task(
         "output_exists": output_path.exists(),
         "stdout": completed.stdout,
         "stderr": completed.stderr,
+        "input_mode": spec.input_mode,
     }
+
+
+def expand_result_rows(
+    launch_result: dict,
+    spec: ParserSpec,
+    launch_input: Path,
+    launch_output: Path,
+    recursive: bool,
+) -> list[dict]:
+    if launch_input.is_file() or spec.input_mode == "directory":
+        return [launch_result]
+
+    pdfs = discover_pdfs(launch_input, recursive)
+    expanded_rows: list[dict] = []
+    for pdf_path in pdfs:
+        output_path = build_output_path(launch_output, launch_input, pdf_path, spec)
+        expanded_rows.append(
+            {
+                **launch_result,
+                "input": str(pdf_path),
+                "output": str(output_path),
+                "output_exists": output_path.exists(),
+            }
+        )
+    return expanded_rows
 
 
 def build_tasks(input_path: Path, output_dir: Path, parsers: Iterable[ParserSpec], recursive: bool) -> list[tuple[ParserSpec, Path, Path]]:
@@ -368,9 +408,52 @@ def build_tasks(input_path: Path, output_dir: Path, parsers: Iterable[ParserSpec
     if not pdfs:
         raise ValueError(f"目录下未找到 PDF: {input_path}")
 
+    batch_parser_ids = {
+        "docling.docling",
+        "docling.docling_force_ocr",
+        "haystack.pypdf",
+        "haystack.multifile",
+        "haystack.pdfminer",
+        "haystack.unstructured",
+        "haystack.tika",
+        "langchain.pypdf",
+        "langchain.pymupdf",
+        "langchain.pymupdf4llm",
+        "langchain.pdfplumber",
+        "langchain.pypdfium2",
+        "langchain.pdfminer",
+        "langchain.docling",
+        "langchain.opendataloader",
+        "langchain.opendataloader_all",
+        "langchain.opendataloader_hidden_text",
+        "langchain.opendataloader_off_page",
+        "langchain.opendataloader_tiny",
+        "langchain.opendataloader_hidden_ocg",
+        "langchain.unstructured_fast",
+        "langchain.unstructured_hi_res",
+        "langchain.unstructured_ocr_only",
+        "llamaindex.pymupdf",
+        "llamaindex.pdfloader",
+        "llamaindex.unstructured",
+        "llamaindex.pdftable",
+        "llamaindex.paddleocr",
+        "llamaindex.smartpdf",
+        "llamaindex.smartpdf_apply_ocr",
+        "llamaindex.nougat",
+        "llamaindex.marker",
+        "llamaindex.docling",
+        "llmsherpa.default",
+        "llmsherpa.apply_ocr",
+    }
+
     for spec in parsers:
         if spec.input_mode == "directory":
             output_path = build_directory_output_path(output_dir, input_path, spec)
+            tasks.append((spec, input_path, output_path))
+            continue
+
+        if spec.id in batch_parser_ids:
+            output_path = output_dir / spec.framework
             tasks.append((spec, input_path, output_path))
             continue
 
@@ -381,11 +464,11 @@ def build_tasks(input_path: Path, output_dir: Path, parsers: Iterable[ParserSpec
     return tasks
 
 
-def build_benchmark_summary(results: list[dict]) -> dict:
+def build_benchmark_summary(results: list[dict], launch_results: list[dict], pdf_count: int) -> dict:
     framework_stats: dict[str, dict] = {}
     parser_stats: dict[str, dict] = {}
 
-    for item in results:
+    for item in launch_results:
         framework = item["framework"]
         parser_id = item["parser_id"]
         duration = float(item.get("duration_seconds", 0.0) or 0.0)
@@ -428,12 +511,13 @@ def build_benchmark_summary(results: list[dict]) -> dict:
         if bucket["task_count"]:
             bucket["avg_duration_seconds"] = round(bucket["total_duration_seconds"] / bucket["task_count"], 4)
 
-    total_duration = round(sum(float(item.get("duration_seconds", 0.0) or 0.0) for item in results), 4)
+    total_duration = round(sum(float(item.get("duration_seconds", 0.0) or 0.0) for item in launch_results), 4)
     return {
-        "task_count": len(results),
-        "success_count": sum(1 for item in results if item["status"] == "success"),
-        "failed_count": sum(1 for item in results if item["status"] == "failed"),
-        "dry_run_count": sum(1 for item in results if item["status"] == "dry_run"),
+        "pdf_count": pdf_count,
+        "task_count": len(launch_results),
+        "success_count": sum(1 for item in launch_results if item["status"] == "success"),
+        "failed_count": sum(1 for item in launch_results if item["status"] == "failed"),
+        "dry_run_count": sum(1 for item in launch_results if item["status"] == "dry_run"),
         "total_duration_seconds": total_duration,
         "frameworks": sorted(framework_stats.values(), key=lambda item: item["framework"]),
         "parsers": sorted(parser_stats.values(), key=lambda item: item["parser_id"]),
@@ -458,11 +542,13 @@ def main() -> int:
     ensure_conda_available(args.use_current_python)
     parsers = select_parsers(args.frameworks, args.parsers)
     tasks = build_tasks(input_path, output_dir, parsers, args.recursive)
+    pdf_count = len(discover_pdfs(input_path, args.recursive))
 
     print("=" * 72)
     print("统一 PDF Parser Runner")
     print(f"输入路径           : {input_path}")
     print(f"输出目录           : {output_dir}")
+    print(f"PDF 数量           : {pdf_count}")
     print(f"框架数量           : {len({spec.framework for spec in parsers})}")
     print(f"Parser 数量        : {len(parsers)}")
     print(f"任务总数           : {len(tasks)}")
@@ -471,10 +557,39 @@ def main() -> int:
     print(f"仅预览             : {args.dry_run}")
     print("=" * 72)
 
+    parser_order: list[str] = []
+    for spec, _, _ in tasks:
+        if spec.id not in parser_order:
+            parser_order.append(spec.id)
+    parser_position = {parser_id: index for index, parser_id in enumerate(parser_order, start=1)}
+
     results = [
-        run_single_task(spec, input_target, output_path, args.use_current_python, args.include_metadata, args.dry_run)
-        for spec, input_target, output_path in tasks
+        run_single_task(
+            spec,
+            input_target,
+            output_path,
+            args.use_current_python,
+            args.include_metadata,
+            args.dry_run,
+            task_index=task_index,
+            task_total=len(tasks),
+            parser_index=parser_position[spec.id],
+            parser_total=len(parser_order),
+        )
+        for task_index, (spec, input_target, output_path) in enumerate(tasks, start=1)
     ]
+
+    expanded_results: list[dict] = []
+    for launch_result, (spec, input_target, output_path) in zip(results, tasks):
+        expanded_results.extend(
+            expand_result_rows(
+                launch_result=launch_result,
+                spec=spec,
+                launch_input=input_target,
+                launch_output=output_path,
+                recursive=args.recursive,
+            )
+        )
 
     success_count = sum(1 for item in results if item["status"] in {"success", "dry_run"})
     failed_count = sum(1 for item in results if item["status"] == "failed")
@@ -487,12 +602,15 @@ def main() -> int:
         "dry_run": args.dry_run,
         "frameworks": args.frameworks,
         "parsers": [spec.id for spec in parsers],
+        "pdf_count": pdf_count,
         "task_count": len(results),
+        "result_count": len(expanded_results),
         "success_count": success_count,
         "failed_count": failed_count,
-        "results": results,
+        "launch_results": results,
+        "results": expanded_results,
     }
-    benchmark_summary = build_benchmark_summary(results)
+    benchmark_summary = build_benchmark_summary(expanded_results, results, pdf_count)
 
     summary_path = save_json(output_dir / "run_summary.json", summary)
     benchmark_path = save_json(output_dir / "benchmark_summary.json", benchmark_summary)

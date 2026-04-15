@@ -61,6 +61,9 @@ python Parser/parser_runner.py -i "path/to/your/pdfDataset" -o "output/path/you/
 
 ```bash
 python Parser/parser_runner.py -i "path/to/your/pdfDataset" -o "output/path/you/specified" -p langchain.pypdf llamaindex.smartpdf llmsherpa.default
+
+% 剔除OCR解析方式
+python Parser/parser_runner.py -i Dataset -o Parser/BatchParseResult --parsers haystack.pypdf haystack.multifile haystack.pdfminer haystack.unstructured haystack.tika langchain.pypdf langchain.pymupdf langchain.pymupdf4llm langchain.pdfplumber langchain.pypdfium2 langchain.pdfminer langchain.docling langchain.opendataloader langchain.opendataloader_all langchain.opendataloader_hidden_text langchain.opendataloader_off_page langchain.opendataloader_tiny langchain.opendataloader_hidden_ocg langchain.unstructured_fast llamaindex.pymupdf llamaindex.pdfloader llamaindex.unstructured llamaindex.smartpdf llamaindex.docling llmsherpa.default
 ```
 
 这个模式适合你做小范围调试。
