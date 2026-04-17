@@ -8,15 +8,32 @@ import unicodedata
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_ATTACK_RECORDS = PROJECT_ROOT / "Dataset" / "batch1" / "attack_records.csv"
-DEFAULT_PARSE_RESULTS = PROJECT_ROOT / "Parser" / "BatchParseResult" / "batch1"
-DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "Evaluation" / "results" / "batch1"
-EXCLUDED_PARSER_IDS = {"langchain.pypdfdirectory"}
-TARGET_FRAMEWORKS = ["docling", "haystack", "langchain", "llamaindex", "llmsherpa"]
+DEFAULT_DATASET_ROOT = PROJECT_ROOT / "Dataset"
+DEFAULT_PARSE_RESULTS_ROOT = PROJECT_ROOT / "Parser" / "BatchParseResult"
+DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "Evaluation" / "results" / "all_batches"
+# 按当前实验设置，整体去掉 docling 框架。
+TARGET_FRAMEWORKS = ["haystack", "langchain", "llamaindex", "llmsherpa"]
+# 同时去掉 docling 整个框架，以及 langchain 下 OpenDataLoader 及其 6 种配置，
+# 再额外去掉 llamaindex 的 docling / unstructured，以及 haystack 的 unstructured。
+EXCLUDED_FRAMEWORKS = {"docling"}
+EXCLUDED_PARSER_IDS = {
+    "docling.docling",
+    "docling.docling_force_ocr",
+    "langchain.opendataloader",
+    "langchain.opendataloader_all",
+    "langchain.opendataloader_hidden_ocg",
+    "langchain.opendataloader_hidden_text",
+    "langchain.opendataloader_off_page",
+    "langchain.opendataloader_tiny",
+    "llamaindex.docling",
+    "llamaindex.unstructured",
+    "haystack.unstructured",
+}
 ATTACK_CATEGORY_DISPLAY_ORDER = [
     "Visual Hiding",
     "Geometric Escape",
@@ -58,9 +75,17 @@ KNOWN_PARSER_OUTPUTS: dict[str, dict[str, str]] = {
         "PyPDFToDocument.txt": "haystack.pypdf",
         "AzureOCRDocumentConverter.txt": "haystack.azureocr",
         "TikaDocumentConverter.txt": "haystack.tika",
-        "UnstructuredFileConverter.txt": "haystack.unstructured",
+        # 当前实验中排除 Haystack 的 Unstructured。
+        # "UnstructuredFileConverter.txt": "haystack.unstructured",
     },
     "langchain": {
+        # 当前实验中排除 OpenDataLoader 及其 6 种配置。
+        # "OpenDataLoader.txt": "langchain.opendataloader",
+        # "OpenDataLoader_all.txt": "langchain.opendataloader_all",
+        # "OpenDataLoader_hidden_ocg.txt": "langchain.opendataloader_hidden_ocg",
+        # "OpenDataLoader_hidden_text.txt": "langchain.opendataloader_hidden_text",
+        # "OpenDataLoader_off_page.txt": "langchain.opendataloader_off_page",
+        # "OpenDataLoader_tiny.txt": "langchain.opendataloader_tiny",
         "DoclingLoader.txt": "langchain.docling",
         "PDFMinerLoader.txt": "langchain.pdfminer",
         "PDFPlumberLoader.txt": "langchain.pdfplumber",
@@ -69,16 +94,20 @@ KNOWN_PARSER_OUTPUTS: dict[str, dict[str, str]] = {
         "PyPDFium2Loader.txt": "langchain.pypdfium2",
         "PyPDFLoader.txt": "langchain.pypdf",
         "UnstructuredLoader.txt": "langchain.unstructured_fast",
+        "UnstructuredLoader_fast.txt": "langchain.unstructured_fast",
     },
     "llamaindex": {
-        "DoclingReader.txt": "llamaindex.docling",
+        # 当前实验中排除 LlamaIndex 的 Docling。
+        # "DoclingLoader.txt": "llamaindex.docling",
+        # "DoclingReader.txt": "llamaindex.docling",
         "LlamaParse.txt": "llamaindex.llamaparse",
         "MarkerPDFLoader.txt": "llamaindex.marker",
         "NougatLoader.txt": "llamaindex.nougat",
         "PyMuPDFLoader.txt": "llamaindex.pymupdf",
         "SmartPDFLoader.txt": "llamaindex.smartpdf",
         "StandardPDF.txt": "llamaindex.pdfloader",
-        "UnstructuredLoader.txt": "llamaindex.unstructured",
+        # 当前实验中排除 LlamaIndex 的 Unstructured。
+        # "UnstructuredLoader.txt": "llamaindex.unstructured",
     },
     "llmsherpa": {
         "SherpaResult.txt": "llmsherpa.default",
@@ -88,6 +117,7 @@ KNOWN_PARSER_OUTPUTS: dict[str, dict[str, str]] = {
 
 @dataclass(frozen=True)
 class AttackRecord:
+    batch_name: str
     output_file_name: str
     attack_category: str
     attack_subcategory: str
@@ -97,24 +127,48 @@ class AttackRecord:
 
 @dataclass(frozen=True)
 class ParseTask:
+    batch_name: str
+    attack_sample: str
     parser_id: str
     framework: str
-    env_name: str
-    status: str
-    input_path: Path
     output_path: Path
-    output_exists: bool
+
+
+@dataclass(frozen=True)
+class PreparedText:
+    raw_text: str
+    normalized_text: str
+    tokens: list[str]
+
+
+@dataclass(frozen=True)
+class ProgressLogger:
+    enabled: bool = True
+
+    def log(self, message: str) -> None:
+        if self.enabled:
+            print(f"[evaluate_injection_recovery] {message}", flush=True)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="评估 PDF parser 对隐式注入内容的暴露能力与恢复完整度")
-    parser.add_argument("--attack-records", type=Path, default=DEFAULT_ATTACK_RECORDS, help="attack_records.csv 路径")
-    parser.add_argument("--parse-results", type=Path, default=DEFAULT_PARSE_RESULTS, help="Parser 批量输出目录")
     parser.add_argument(
-        "--run-summary",
+        "--dataset-root",
         type=Path,
+        default=DEFAULT_DATASET_ROOT,
+        help="包含多个 batch 子目录的 Dataset 根目录",
+    )
+    parser.add_argument(
+        "--parse-results-root",
+        type=Path,
+        default=DEFAULT_PARSE_RESULTS_ROOT,
+        help="包含多个 batch 子目录的 Parser 输出根目录",
+    )
+    parser.add_argument(
+        "--batches",
+        nargs="*",
         default=None,
-        help="单个 run summary 文件路径；不传时会自动汇总 batch 目录下的多个 summary json",
+        help="要评估的 batch 名称列表；不传时自动取 Dataset 与 Parser 输出中共同存在的 batch",
     )
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR, help="评估结果输出目录")
     parser.add_argument(
@@ -124,11 +178,6 @@ def parse_args() -> argparse.Namespace:
         help="将解析成功定义为恢复完整度达到该阈值，默认 0.1",
     )
     return parser.parse_args()
-
-
-# 说明：如果某个 framework（例如 docling）是在服务器上单独跑的，
-# 只要后续把输出文件同步到 `parse-results/<framework>/<pdf_stem>/...` 目录下，
-# 即使本地没有对应的 summary json，本脚本也会根据输出文件名自动识别并纳入统计。
 
 
 def normalize_text(text: str) -> str:
@@ -142,6 +191,12 @@ def normalize_text(text: str) -> str:
 
 def tokenize(text: str) -> list[str]:
     return re.findall(r"[a-z0-9]+", normalize_text(text))
+
+
+def prepare_text(text: str) -> PreparedText:
+    normalized_text = normalize_text(text)
+    tokens = re.findall(r"[a-z0-9]+", normalized_text)
+    return PreparedText(raw_text=text, normalized_text=normalized_text, tokens=tokens)
 
 
 def normalize_group_value(group_field: str, group_value: str) -> str:
@@ -198,18 +253,18 @@ def counter_overlap_count(reference_tokens: list[str], candidate_tokens: list[st
     return sum(overlap.values())
 
 
-def compute_metrics(injection_content: str, parsed_text: str, success_threshold: float) -> dict[str, Any]:
-    normalized_injection = normalize_text(injection_content)
-    normalized_parsed = normalize_text(parsed_text)
+def compute_metrics(
+    prepared_injection: PreparedText,
+    prepared_parsed: PreparedText,
+    success_threshold: float,
+) -> dict[str, Any]:
+    exact_substring_match = bool(prepared_injection.normalized_text) and (
+        prepared_injection.normalized_text in prepared_parsed.normalized_text
+    )
+    ordered_matches = ordered_match_count(prepared_injection.tokens, prepared_parsed.tokens)
+    token_overlap = counter_overlap_count(prepared_injection.tokens, prepared_parsed.tokens)
 
-    injection_tokens = tokenize(injection_content)
-    parsed_tokens = tokenize(parsed_text)
-
-    exact_substring_match = bool(normalized_injection) and normalized_injection in normalized_parsed
-    ordered_matches = ordered_match_count(injection_tokens, parsed_tokens)
-    token_overlap = counter_overlap_count(injection_tokens, parsed_tokens)
-
-    token_count = len(injection_tokens)
+    token_count = len(prepared_injection.tokens)
     if token_count == 0:
         ordered_recall = 0.0
         token_recall = 0.0
@@ -232,145 +287,94 @@ def compute_metrics(injection_content: str, parsed_text: str, success_threshold:
     }
 
 
-def load_attack_records(csv_path: Path) -> list[AttackRecord]:
+def discover_batches(dataset_root: Path, parse_results_root: Path, requested_batches: list[str] | None) -> list[str]:
+    if requested_batches:
+        return requested_batches
+
+    dataset_batches = {path.name for path in dataset_root.iterdir() if path.is_dir()} if dataset_root.exists() else set()
+    result_batches = {path.name for path in parse_results_root.iterdir() if path.is_dir()} if parse_results_root.exists() else set()
+    batches = sorted(dataset_batches & result_batches)
+    if not batches:
+        raise FileNotFoundError("未找到可评估的 batch：请检查 Dataset 与 Parser/BatchParseResult 目录")
+    return batches
+
+
+def load_attack_records(dataset_root: Path, batch_names: list[str]) -> list[AttackRecord]:
     records: list[AttackRecord] = []
-    with csv_path.open("r", encoding="utf-8-sig", newline="") as csv_file:
-        reader = csv.DictReader(csv_file)
-        for row in reader:
-            records.append(
-                AttackRecord(
-                    output_file_name=row["Output File Name"].strip(),
-                    attack_category=normalize_group_value("attack_category", row["Attack Category"]),
-                    attack_subcategory=normalize_group_value("attack_subcategory", row["Attack Subcategory"]),
-                    injection_content=row["Injection Content"].strip(),
-                    source_pdf_name=row["File Name"].strip(),
-                )
-            )
-    return records
 
+    for batch_name in batch_names:
+        csv_path = dataset_root / batch_name / "attack_records.csv"
+        if not csv_path.exists():
+            raise FileNotFoundError(f"未找到 attack_records.csv: {csv_path}")
 
-def discover_summary_files(parse_results_root: Path, explicit_summary: Path | None) -> list[Path]:
-    if explicit_summary is not None:
-        return [explicit_summary]
-
-    summary_files = [
-        path
-        for path in parse_results_root.glob("*.json")
-        if path.name not in {"benchmark_summary.json", "run_summary.json"}
-    ]
-    return sorted(summary_files, key=lambda path: path.name.lower())
-
-
-def detect_parse_tasks_from_outputs(
-    parse_results_root: Path,
-    attack_records: list[AttackRecord],
-    known_tasks: list[ParseTask],
-) -> list[ParseTask]:
-    attack_names = {record.output_file_name for record in attack_records}
-    seen_pairs = {(task.parser_id, task.input_path.name) for task in known_tasks}
-    discovered_tasks: list[ParseTask] = []
-
-    for framework, output_map in KNOWN_PARSER_OUTPUTS.items():
-        framework_root = parse_results_root / framework
-        if not framework_root.exists() or not framework_root.is_dir():
-            continue
-
-        for sample_dir in sorted(path for path in framework_root.iterdir() if path.is_dir()):
-            input_name = f"{sample_dir.name}.pdf"
-            if input_name not in attack_names:
-                continue
-
-            for file_name, parser_id in output_map.items():
-                output_path = sample_dir / file_name
-                if not output_path.exists() or not output_path.is_file():
-                    continue
-
-                dedupe_key = (parser_id, input_name)
-                if dedupe_key in seen_pairs:
-                    continue
-
-                seen_pairs.add(dedupe_key)
-                discovered_tasks.append(
-                    ParseTask(
-                        parser_id=parser_id,
-                        framework=framework,
-                        env_name="detected_from_output",
-                        status="success",
-                        input_path=Path(input_name),
-                        output_path=output_path,
-                        output_exists=True,
+        with csv_path.open("r", encoding="utf-8-sig", newline="") as csv_file:
+            reader = csv.DictReader(csv_file)
+            for row in reader:
+                records.append(
+                    AttackRecord(
+                        batch_name=batch_name,
+                        output_file_name=row["Output File Name"].strip(),
+                        attack_category=normalize_group_value("attack_category", row["Attack Category"]),
+                        attack_subcategory=normalize_group_value("attack_subcategory", row["Attack Subcategory"]),
+                        injection_content=row["Injection Content"].strip(),
+                        source_pdf_name=row["File Name"].strip(),
                     )
                 )
 
-    return discovered_tasks
+    return records
 
 
-def load_parse_tasks_from_payload(payload: dict[str, Any], summary_path: Path, parse_results_root: Path) -> list[ParseTask]:
-    parse_tasks: list[ParseTask] = []
+def discover_parse_tasks(parse_results_root: Path, attack_records: list[AttackRecord], batch_names: list[str]) -> list[ParseTask]:
+    attack_records_by_batch: dict[str, dict[str, AttackRecord]] = defaultdict(dict)
+    for record in attack_records:
+        attack_records_by_batch[record.batch_name][record.output_file_name] = record
 
-    for item in payload.get("results", []):
-        if item.get("parser_id") in EXCLUDED_PARSER_IDS:
-            continue
+    tasks: list[ParseTask] = []
+    seen: set[tuple[str, str, str]] = set()
 
-        input_path = Path(item["input"])
-        if input_path.is_dir() or input_path.suffix.lower() != ".pdf":
-            continue
+    for batch_name in batch_names:
+        batch_root = parse_results_root / batch_name
+        if not batch_root.exists():
+            raise FileNotFoundError(f"未找到 batch 输出目录: {batch_root}")
 
-        output_path = Path(item["output"])
-        if not output_path.is_absolute():
-            output_path = (summary_path.parent / output_path).resolve()
-
-        if not output_path.exists():
-            try:
-                relative_output = output_path.relative_to(parse_results_root)
-            except ValueError:
-                relative_output = None
-
-            if relative_output is not None and relative_output.parts:
-                if relative_output.parts[0] != item["framework"]:
-                    output_path = parse_results_root / item["framework"] / relative_output
-            else:
-                output_path = (parse_results_root / item["framework"] / output_path.name).resolve()
-
-        parse_tasks.append(
-            ParseTask(
-                parser_id=item["parser_id"],
-                framework=item["framework"],
-                env_name=item["env_name"],
-                status=item["status"],
-                input_path=input_path,
-                output_path=output_path,
-                output_exists=output_path.exists(),
-            )
-        )
-
-    return parse_tasks
-
-
-def load_parse_tasks(summary_files: list[Path], parse_results_root: Path) -> tuple[list[ParseTask], list[str]]:
-    all_tasks: list[ParseTask] = []
-    skipped_directory_parsers: set[str] = set()
-    seen_pairs: set[tuple[str, str]] = set()
-
-    for summary_path in summary_files:
-        with summary_path.open("r", encoding="utf-8") as summary_file:
-            payload = json.load(summary_file)
-
-        for item in payload.get("results", []):
-            if item.get("parser_id") in EXCLUDED_PARSER_IDS:
+        valid_samples = attack_records_by_batch.get(batch_name, {})
+        for framework, output_map in KNOWN_PARSER_OUTPUTS.items():
+            if framework in EXCLUDED_FRAMEWORKS:
                 continue
-            input_path = Path(item["input"])
-            if input_path.is_dir() or input_path.suffix.lower() != ".pdf":
-                skipped_directory_parsers.add(item["parser_id"])
 
-        for task in load_parse_tasks_from_payload(payload, summary_path, parse_results_root):
-            dedupe_key = (task.parser_id, task.input_path.name)
-            if dedupe_key in seen_pairs:
+            framework_root = batch_root / framework
+            if not framework_root.exists() or not framework_root.is_dir():
                 continue
-            seen_pairs.add(dedupe_key)
-            all_tasks.append(task)
 
-    return all_tasks, sorted(skipped_directory_parsers)
+            for sample_dir in sorted(path for path in framework_root.iterdir() if path.is_dir()):
+                attack_sample = f"{sample_dir.name}.pdf"
+                if attack_sample not in valid_samples:
+                    continue
+
+                for file_name, parser_id in output_map.items():
+                    if parser_id in EXCLUDED_PARSER_IDS:
+                        continue
+
+                    output_path = sample_dir / file_name
+                    if not output_path.exists() or not output_path.is_file():
+                        continue
+
+                    dedupe_key = (batch_name, attack_sample, parser_id)
+                    if dedupe_key in seen:
+                        continue
+                    seen.add(dedupe_key)
+
+                    tasks.append(
+                        ParseTask(
+                            batch_name=batch_name,
+                            attack_sample=attack_sample,
+                            parser_id=parser_id,
+                            framework=framework,
+                            output_path=output_path,
+                        )
+                    )
+
+    return tasks
 
 
 def read_text_if_exists(path: Path) -> str:
@@ -379,33 +383,77 @@ def read_text_if_exists(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="ignore")
 
 
+def build_prepared_attack_lookup(
+    attack_records: list[AttackRecord],
+    logger: ProgressLogger | None = None,
+) -> dict[tuple[str, str], PreparedText]:
+    prepared_lookup: dict[tuple[str, str], PreparedText] = {}
+    total_records = len(attack_records)
+    progress_interval = max(1, total_records // 10) if total_records else 1
+
+    for index, record in enumerate(attack_records, start=1):
+        prepared_lookup[(record.batch_name, record.output_file_name)] = prepare_text(record.injection_content)
+        if logger and (index == 1 or index == total_records or index % progress_interval == 0):
+            logger.log(f"注入文本预处理进度: {index}/{total_records}")
+
+    return prepared_lookup
+
+
+def build_prepared_parse_lookup(
+    parse_tasks: list[ParseTask],
+    logger: ProgressLogger | None = None,
+) -> dict[tuple[str, str, str], PreparedText]:
+    prepared_lookup: dict[tuple[str, str, str], PreparedText] = {}
+    total_tasks = len(parse_tasks)
+    progress_interval = max(1, total_tasks // 10) if total_tasks else 1
+
+    for index, task in enumerate(parse_tasks, start=1):
+        prepared_lookup[(task.batch_name, task.attack_sample, task.parser_id)] = prepare_text(read_text_if_exists(task.output_path))
+        if logger and (index == 1 or index == total_tasks or index % progress_interval == 0):
+            logger.log(f"解析输出预处理进度: {index}/{total_tasks}")
+
+    return prepared_lookup
+
+
 def build_sample_rows(
     attack_records: list[AttackRecord],
     parse_tasks: list[ParseTask],
     success_threshold: float,
+    logger: ProgressLogger | None = None,
 ) -> list[dict[str, Any]]:
-    records_by_output_name = {record.output_file_name: record for record in attack_records}
     parser_ids = sorted({task.parser_id for task in parse_tasks})
-
-    task_lookup: dict[tuple[str, str], ParseTask] = {}
+    task_lookup: dict[tuple[str, str, str], ParseTask] = {}
     parser_framework: dict[str, str] = {}
 
     for task in parse_tasks:
-        pdf_name = task.input_path.name
-        if pdf_name in records_by_output_name:
-            task_lookup[(task.parser_id, pdf_name)] = task
-            parser_framework[task.parser_id] = task.framework
+        task_lookup[(task.batch_name, task.attack_sample, task.parser_id)] = task
+        parser_framework[task.parser_id] = task.framework
+
+    if logger:
+        logger.log(f"开始构建缓存：{len(attack_records)} 条攻击记录，{len(parse_tasks)} 个解析输出")
+    prepared_attack_lookup = build_prepared_attack_lookup(attack_records, logger=logger)
+    prepared_parse_lookup = build_prepared_parse_lookup(parse_tasks, logger=logger)
+    empty_prepared_text = PreparedText(raw_text="", normalized_text="", tokens=[])
+
+    total_pairs = len(parser_ids) * len(attack_records)
+    progress_interval = max(1, total_pairs // 20) if total_pairs else 1
+    processed_pairs = 0
 
     rows: list[dict[str, Any]] = []
-
     for parser_id in parser_ids:
+        if logger:
+            logger.log(f"开始评估 parser: {parser_id}")
         for record in attack_records:
-            task = task_lookup.get((parser_id, record.output_file_name))
-            parsed_text = read_text_if_exists(task.output_path) if task and task.output_exists else ""
-            metrics = compute_metrics(record.injection_content, parsed_text, success_threshold)
+            task = task_lookup.get((record.batch_name, record.output_file_name, parser_id))
+            prepared_injection = prepared_attack_lookup[(record.batch_name, record.output_file_name)]
+            prepared_parsed = (
+                prepared_parse_lookup[(task.batch_name, task.attack_sample, task.parser_id)] if task else empty_prepared_text
+            )
+            metrics = compute_metrics(prepared_injection, prepared_parsed, success_threshold)
 
             rows.append(
                 {
+                    "batch_name": record.batch_name,
                     "parser_id": parser_id,
                     "framework": parser_framework.get(parser_id, "unknown"),
                     "attack_sample": record.output_file_name,
@@ -413,12 +461,15 @@ def build_sample_rows(
                     "attack_category": record.attack_category,
                     "attack_subcategory": record.attack_subcategory,
                     "injection_content": record.injection_content,
-                    "task_status": task.status if task else "not_run",
+                    "task_status": "success" if task else "not_run",
                     "output_path": str(task.output_path) if task else "",
-                    "output_exists": bool(task and task.output_exists),
+                    "output_exists": bool(task),
                     **metrics,
                 }
             )
+            processed_pairs += 1
+            if logger and (processed_pairs == 1 or processed_pairs == total_pairs or processed_pairs % progress_interval == 0):
+                logger.log(f"样本-解析器评估进度: {processed_pairs}/{total_pairs}")
 
     return rows
 
@@ -532,6 +583,71 @@ def build_framework_metric_rows(
     return output_rows
 
 
+def build_attack_method_ranking_rows(sample_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    category_by_subcategory: dict[str, str] = {}
+
+    for row in sample_rows:
+        attack_method = row["attack_subcategory"]
+        grouped[attack_method].append(row)
+        category_by_subcategory[attack_method] = row["attack_category"]
+
+    ranking_rows: list[dict[str, Any]] = []
+    sorted_items = sorted(
+        grouped.items(),
+        key=lambda item: (
+            -float(summarize_rows(item[1])["injection_parse_success_rate"]),
+            -float(summarize_rows(item[1])["avg_recovery_completeness"]),
+            item[0],
+        ),
+    )
+
+    for rank, (attack_method, rows) in enumerate(sorted_items, start=1):
+        ranking_rows.append(
+            {
+                "rank": rank,
+                "attack_category": category_by_subcategory[attack_method],
+                "attack_method": attack_method,
+                **summarize_rows(rows),
+            }
+        )
+
+    return ranking_rows
+
+
+def build_parser_vulnerability_ranking_rows(sample_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    framework_by_parser: dict[str, str] = {}
+
+    for row in sample_rows:
+        parser_id = row["parser_id"]
+        grouped[parser_id].append(row)
+        framework_by_parser[parser_id] = row["framework"]
+
+    ranking_rows: list[dict[str, Any]] = []
+    sorted_items = sorted(
+        grouped.items(),
+        key=lambda item: (
+            -float(summarize_rows(item[1])["injection_parse_success_rate"]),
+            -float(summarize_rows(item[1])["avg_recovery_completeness"]),
+            framework_sort_key(framework_by_parser[item[0]]),
+            item[0],
+        ),
+    )
+
+    for rank, (parser_id, rows) in enumerate(sorted_items, start=1):
+        ranking_rows.append(
+            {
+                "rank": rank,
+                "parser_id": parser_id,
+                "framework": framework_by_parser[parser_id],
+                **summarize_rows(rows),
+            }
+        )
+
+    return ranking_rows
+
+
 def save_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if not rows:
@@ -552,23 +668,39 @@ def save_json(path: Path, payload: dict[str, Any]) -> None:
 
 def main() -> int:
     args = parse_args()
+    logger = ProgressLogger()
+    total_start = perf_counter()
 
-    attack_records = load_attack_records(args.attack_records)
-    summary_files = discover_summary_files(args.parse_results, args.run_summary)
-    if not summary_files:
-        raise FileNotFoundError(f"未找到 summary json: {args.parse_results}")
+    logger.log("开始评估")
+    logger.log(f"dataset_root = {args.dataset_root}")
+    logger.log(f"parse_results_root = {args.parse_results_root}")
+    logger.log(f"output_dir = {args.output_dir}")
 
-    parse_tasks, skipped_directory_parsers = load_parse_tasks(summary_files, args.parse_results)
-    detected_tasks = detect_parse_tasks_from_outputs(args.parse_results, attack_records, parse_tasks)
-    parse_tasks.extend(detected_tasks)
+    step_start = perf_counter()
+    batch_names = discover_batches(args.dataset_root, args.parse_results_root, args.batches)
+    logger.log(f"已发现 {len(batch_names)} 个 batch: {', '.join(batch_names)}，耗时 {perf_counter() - step_start:.2f}s")
 
-    sample_rows = build_sample_rows(attack_records, parse_tasks, args.success_threshold)
+    step_start = perf_counter()
+    attack_records = load_attack_records(args.dataset_root, batch_names)
+    logger.log(f"已加载攻击记录 {len(attack_records)} 条，耗时 {perf_counter() - step_start:.2f}s")
+
+    step_start = perf_counter()
+    parse_tasks = discover_parse_tasks(args.parse_results_root, attack_records, batch_names)
+    logger.log(f"已发现解析输出任务 {len(parse_tasks)} 个，耗时 {perf_counter() - step_start:.2f}s")
+
+    step_start = perf_counter()
+    sample_rows = build_sample_rows(attack_records, parse_tasks, args.success_threshold, logger=logger)
+    logger.log(f"样本级评估完成，共 {len(sample_rows)} 条记录，耗时 {perf_counter() - step_start:.2f}s")
+
+    step_start = perf_counter()
     parser_rows = build_parser_rows(sample_rows)
     category_rows = build_group_rows(sample_rows, "attack_category")
     subcategory_rows = build_group_rows(sample_rows, "attack_subcategory")
     framework_category_rows = build_framework_group_rows(sample_rows, "attack_category")
     framework_subcategory_rows = build_framework_group_rows(sample_rows, "attack_subcategory")
+    logger.log(f"聚合统计完成，耗时 {perf_counter() - step_start:.2f}s")
 
+    step_start = perf_counter()
     category_success_rows = build_framework_metric_rows(
         framework_category_rows,
         "attack_category",
@@ -589,7 +721,11 @@ def main() -> int:
         "attack_subcategory",
         "avg_recovery_completeness",
     )
+    attack_method_ranking_rows = build_attack_method_ranking_rows(sample_rows)
+    parser_vulnerability_ranking_rows = build_parser_vulnerability_ranking_rows(sample_rows)
+    logger.log(f"框架热图指标与排序整理完成，耗时 {perf_counter() - step_start:.2f}s")
 
+    step_start = perf_counter()
     args.output_dir.mkdir(parents=True, exist_ok=True)
     sample_csv_path = args.output_dir / "sample_level_metrics.csv"
     parser_csv_path = args.output_dir / "parser_level_metrics.csv"
@@ -601,6 +737,8 @@ def main() -> int:
     category_completeness_csv_path = args.output_dir / "framework_category_recovery_completeness.csv"
     subcategory_success_csv_path = args.output_dir / "framework_subcategory_success_rate.csv"
     subcategory_completeness_csv_path = args.output_dir / "framework_subcategory_recovery_completeness.csv"
+    attack_method_ranking_csv_path = args.output_dir / "attack_method_success_ranking.csv"
+    parser_vulnerability_ranking_csv_path = args.output_dir / "parser_vulnerability_ranking.csv"
     summary_json_path = args.output_dir / "evaluation_summary.json"
 
     save_csv(sample_csv_path, sample_rows)
@@ -613,18 +751,20 @@ def main() -> int:
     save_csv(category_completeness_csv_path, category_completeness_rows)
     save_csv(subcategory_success_csv_path, subcategory_success_rows)
     save_csv(subcategory_completeness_csv_path, subcategory_completeness_rows)
+    save_csv(attack_method_ranking_csv_path, attack_method_ranking_rows)
+    save_csv(parser_vulnerability_ranking_csv_path, parser_vulnerability_ranking_rows)
 
     summary_payload = {
+        "batch_names": batch_names,
+        "batch_count": len(batch_names),
         "attack_record_count": len(attack_records),
         "evaluated_parser_count": len(parser_rows),
         "evaluated_framework_count": len({row['framework'] for row in parser_rows}),
         "evaluated_sample_pairs": len(sample_rows),
+        "discovered_output_task_count": len(parse_tasks),
         "success_threshold": args.success_threshold,
-        "attack_records_path": str(args.attack_records.resolve()),
-        "parse_results_path": str(args.parse_results.resolve()),
-        "summary_files": [str(path.resolve()) for path in summary_files],
-        "skipped_directory_parsers": skipped_directory_parsers,
-        "detected_task_count_from_outputs": len(detected_tasks),
+        "dataset_root": str(args.dataset_root.resolve()),
+        "parse_results_root": str(args.parse_results_root.resolve()),
         "sample_level_metrics_csv": str(sample_csv_path.resolve()),
         "parser_level_metrics_csv": str(parser_csv_path.resolve()),
         "parser_attack_category_metrics_csv": str(category_csv_path.resolve()),
@@ -635,20 +775,26 @@ def main() -> int:
         "framework_category_recovery_completeness_csv": str(category_completeness_csv_path.resolve()),
         "framework_subcategory_success_rate_csv": str(subcategory_success_csv_path.resolve()),
         "framework_subcategory_recovery_completeness_csv": str(subcategory_completeness_csv_path.resolve()),
+        "attack_method_success_ranking_csv": str(attack_method_ranking_csv_path.resolve()),
+        "parser_vulnerability_ranking_csv": str(parser_vulnerability_ranking_csv_path.resolve()),
     }
     save_json(summary_json_path, summary_payload)
+    logger.log(f"结果文件已写出，耗时 {perf_counter() - step_start:.2f}s")
+    logger.log(f"总耗时 {perf_counter() - total_start:.2f}s")
 
     print("评估完成")
+    print(f"Batch 数: {len(batch_names)} -> {', '.join(batch_names)}")
     print(f"攻击样本数: {len(attack_records)}")
+    print(f"发现输出任务数: {len(parse_tasks)}")
     print(f"参与评估的 parser 数: {len(parser_rows)}")
     print(f"参与评估的 framework 数: {len({row['framework'] for row in parser_rows})}")
     print(f"样本-解析器配对数: {len(sample_rows)}")
-    if skipped_directory_parsers:
-        print(f"跳过的目录型 parser: {', '.join(skipped_directory_parsers)}")
     print(f"五框架-四大类成功率: {category_success_csv_path}")
     print(f"五框架-四大类完整度: {category_completeness_csv_path}")
     print(f"五框架-八小类成功率: {subcategory_success_csv_path}")
     print(f"五框架-八小类完整度: {subcategory_completeness_csv_path}")
+    print(f"攻击方法成功率排序: {attack_method_ranking_csv_path}")
+    print(f"解析器易受攻击排序: {parser_vulnerability_ranking_csv_path}")
     print(f"汇总 JSON: {summary_json_path}")
 
     return 0

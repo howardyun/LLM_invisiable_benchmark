@@ -13,8 +13,11 @@ from matplotlib.colors import LinearSegmentedColormap
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CSV_DIR = PROJECT_ROOT / "Evaluation" / "results" / "batch1"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "Figures" / "output" / "batch1"
-CSV_FRAMEWORK_KEYS = ["docling", "haystack", "langchain", "llamaindex", "llmsherpa"]
-FRAMEWORKS = ["Docling", "Haystack", "LangChain", "LlamaIndex", "LLMSherpa"]
+# 与评估脚本保持一致：画框架图时去掉 docling。
+# 另外 llamaindex 的 docling / unstructured、haystack 的 unstructured
+# 已在评估阶段从聚合结果中排除，因此这里直接沿用筛过的 4 个 framework 列。
+CSV_FRAMEWORK_KEYS = ["haystack", "langchain", "llamaindex", "llmsherpa"]
+FRAMEWORKS = ["Haystack", "LangChain", "LlamaIndex", "LLMSherpa"]
 SOFT_REDS_CMAP = LinearSegmentedColormap.from_list(
     "soft_reference_reds",
     ["#fff5f0", "#fdd0c2", "#fc9272", "#ef3b2c", "#99000d"],

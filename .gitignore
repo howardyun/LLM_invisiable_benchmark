@@ -10,6 +10,4 @@ Demo_data
 
 /Parser/merge_run_summaries.py
 **/__pycache__/
-**/output/
-**/results/
-**/plot_parser_heatmaps.py
+
