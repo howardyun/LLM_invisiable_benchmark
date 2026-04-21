@@ -1,5 +1,0 @@
-attack_category,metric,haystack,langchain,llamaindex,llmsherpa
-Visual Hiding,隐式注入解析成功率,0.95834,0.18574,0.879828,0.758578
-Geometric Escape,隐式注入解析成功率,0.85937,0.123775,0.575488,0.78319
-Presentation Layer Encoding,隐式注入解析成功率,0.040677,0.007497,0.039588,0.040974
-Parsing Order/Multi-view Inconsistency,隐式注入解析成功率,0.999109,0.219789,0.986342,0.960214

@@ -43,6 +43,9 @@ CSV_SPECS = [
         "framework_subcategory_recovery_completeness.png",
     ),
 ]
+ATTACK_SUBCATEGORY_LABELS = {
+    "pdf_mirage": "PDF Mirage",
+}
 CHINESE_FONT_CANDIDATES = [
     "Microsoft YaHei",
     "Microsoft JhengHei",
@@ -88,7 +91,10 @@ def load_heatmap_csv(csv_path: Path, row_field: str) -> tuple[list[str], list[li
     with csv_path.open("r", encoding="utf-8-sig", newline="") as csv_file:
         reader = csv.DictReader(csv_file)
         for row in reader:
-            row_labels.append(row[row_field])
+            row_label = row[row_field]
+            if row_field == "attack_subcategory":
+                row_label = ATTACK_SUBCATEGORY_LABELS.get(row_label, row_label)
+            row_labels.append(row_label)
             if not metric_label:
                 metric_label = row.get("metric", "")
 

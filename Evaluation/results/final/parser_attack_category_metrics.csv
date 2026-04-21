@@ -1,0 +1,65 @@
+parser_id,framework,attack_category,attacked_sample_count,available_output_count,successful_sample_count,injection_parse_success_rate,avg_recovery_completeness
+haystack.multifile,haystack,Visual Hiding,6499,6483,6350,0.977073,0.955929
+haystack.pdfminer,haystack,Visual Hiding,6499,6498,5840,0.8986,0.870407
+haystack.pypdf,haystack,Visual Hiding,6499,6498,6353,0.977535,0.956405
+haystack.tika,haystack,Visual Hiding,6499,6497,6370,0.980151,0.958853
+haystack.multifile,haystack,Geometric Escape,3367,3359,2955,0.877636,0.846022
+haystack.pdfminer,haystack,Geometric Escape,3367,3367,2689,0.798634,0.778437
+haystack.pypdf,haystack,Geometric Escape,3367,3367,2955,0.877636,0.846022
+haystack.tika,haystack,Geometric Escape,3367,3367,2975,0.883576,0.841766
+haystack.multifile,haystack,Presentation Layer Encoding,4678,4677,3051,0.652202,0.64079
+haystack.pdfminer,haystack,Presentation Layer Encoding,4678,4677,3060,0.654126,0.642937
+haystack.pypdf,haystack,Presentation Layer Encoding,4678,4677,3051,0.652202,0.64079
+haystack.tika,haystack,Presentation Layer Encoding,4678,4676,3041,0.650064,0.638851
+haystack.multifile,haystack,Parsing Order/Multi-view Inconsistency,1684,1683,1683,0.999406,0.399762
+haystack.pdfminer,haystack,Parsing Order/Multi-view Inconsistency,1684,1683,1683,0.999406,0.399762
+haystack.pypdf,haystack,Parsing Order/Multi-view Inconsistency,1684,1683,1683,0.999406,0.399762
+haystack.tika,haystack,Parsing Order/Multi-view Inconsistency,1684,1681,1681,0.998219,0.401663
+langchain.docling,langchain,Visual Hiding,6499,6497,925,0.14233,0.103037
+langchain.pdfminer,langchain,Visual Hiding,6499,6495,1350,0.207724,0.199275
+langchain.pdfplumber,langchain,Visual Hiding,6499,6495,1312,0.201877,0.19141
+langchain.pymupdf,langchain,Visual Hiding,6499,6498,1353,0.208186,0.199087
+langchain.pymupdf4llm,langchain,Visual Hiding,6499,6498,935,0.143868,0.133469
+langchain.pypdf,langchain,Visual Hiding,6499,6492,1476,0.227112,0.220213
+langchain.pypdfium2,langchain,Visual Hiding,6499,6498,1240,0.190799,0.181461
+langchain.unstructured_fast,langchain,Visual Hiding,6499,6498,1066,0.164025,0.120442
+langchain.docling,langchain,Geometric Escape,3367,3367,249,0.073953,0.0521
+langchain.pdfminer,langchain,Geometric Escape,3367,3362,661,0.196317,0.191791
+langchain.pdfplumber,langchain,Geometric Escape,3367,3362,688,0.204336,0.192274
+langchain.pymupdf,langchain,Geometric Escape,3367,3367,30,0.00891,0.001767
+langchain.pymupdf4llm,langchain,Geometric Escape,3367,3367,28,0.008316,0.001586
+langchain.pypdf,langchain,Geometric Escape,3367,3364,710,0.21087,0.205498
+langchain.pypdfium2,langchain,Geometric Escape,3367,3367,274,0.081378,0.064029
+langchain.unstructured_fast,langchain,Geometric Escape,3367,3367,694,0.206118,0.194146
+langchain.docling,langchain,Presentation Layer Encoding,4678,4677,2982,0.637452,0.633788
+langchain.pdfminer,langchain,Presentation Layer Encoding,4678,4677,3006,0.642582,0.640495
+langchain.pdfplumber,langchain,Presentation Layer Encoding,4678,4677,341,0.072894,0.037269
+langchain.pymupdf,langchain,Presentation Layer Encoding,4678,4677,3005,0.642369,0.640474
+langchain.pymupdf4llm,langchain,Presentation Layer Encoding,4678,4677,1997,0.426892,0.359674
+langchain.pypdf,langchain,Presentation Layer Encoding,4678,4677,2992,0.63959,0.638008
+langchain.pypdfium2,langchain,Presentation Layer Encoding,4678,4677,3005,0.642369,0.640474
+langchain.unstructured_fast,langchain,Presentation Layer Encoding,4678,4677,3009,0.643224,0.640593
+langchain.docling,langchain,Parsing Order/Multi-view Inconsistency,1684,1683,277,0.164489,0.063658
+langchain.pdfminer,langchain,Parsing Order/Multi-view Inconsistency,1684,1683,396,0.235154,0.094715
+langchain.pdfplumber,langchain,Parsing Order/Multi-view Inconsistency,1684,1683,342,0.203088,0.069893
+langchain.pymupdf,langchain,Parsing Order/Multi-view Inconsistency,1684,1683,396,0.235154,0.094062
+langchain.pymupdf4llm,langchain,Parsing Order/Multi-view Inconsistency,1684,1683,362,0.214964,0.095428
+langchain.pypdf,langchain,Parsing Order/Multi-view Inconsistency,1684,1683,396,0.235154,0.094062
+langchain.pypdfium2,langchain,Parsing Order/Multi-view Inconsistency,1684,1683,396,0.235154,0.094062
+langchain.unstructured_fast,langchain,Parsing Order/Multi-view Inconsistency,1684,1683,396,0.235154,0.094062
+llamaindex.pdfloader,llamaindex,Visual Hiding,6499,6498,6365,0.979381,0.958109
+llamaindex.pymupdf,llamaindex,Visual Hiding,6499,6498,5859,0.901523,0.870605
+llamaindex.smartpdf,llamaindex,Visual Hiding,6499,6495,4930,0.758578,0.724618
+llamaindex.pdfloader,llamaindex,Geometric Escape,3367,3367,2963,0.880012,0.848398
+llamaindex.pymupdf,llamaindex,Geometric Escape,3367,3367,213,0.063261,0.009916
+llamaindex.smartpdf,llamaindex,Geometric Escape,3367,3363,2637,0.78319,0.744758
+llamaindex.pdfloader,llamaindex,Presentation Layer Encoding,4678,4677,3041,0.650064,0.640351
+llamaindex.pymupdf,llamaindex,Presentation Layer Encoding,4678,4677,3066,0.655408,0.643295
+llamaindex.smartpdf,llamaindex,Presentation Layer Encoding,4678,4677,3031,0.647926,0.635927
+llamaindex.pdfloader,llamaindex,Parsing Order/Multi-view Inconsistency,1684,1683,1683,0.999406,0.399762
+llamaindex.pymupdf,llamaindex,Parsing Order/Multi-view Inconsistency,1684,1683,1683,0.999406,0.399762
+llamaindex.smartpdf,llamaindex,Parsing Order/Multi-view Inconsistency,1684,1683,1617,0.960214,0.470071
+llmsherpa.default,llmsherpa,Visual Hiding,6499,6495,4930,0.758578,0.724618
+llmsherpa.default,llmsherpa,Geometric Escape,3367,3363,2637,0.78319,0.744758
+llmsherpa.default,llmsherpa,Presentation Layer Encoding,4678,4677,3032,0.64814,0.635982
+llmsherpa.default,llmsherpa,Parsing Order/Multi-view Inconsistency,1684,1683,1617,0.960214,0.470071

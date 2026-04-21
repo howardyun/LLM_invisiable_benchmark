@@ -1,0 +1,17 @@
+parser_id,framework,attacked_sample_count,available_output_count,successful_sample_count,injection_parse_success_rate,avg_recovery_completeness
+haystack.multifile,haystack,16228,16202,14039,0.86511,0.784567
+haystack.pdfminer,haystack,16228,16225,13272,0.817846,0.736913
+haystack.pypdf,haystack,16228,16225,14042,0.865295,0.784758
+haystack.tika,haystack,16228,16221,14067,0.866835,0.784493
+langchain.docling,langchain,16228,16224,4433,0.27317,0.24138
+langchain.pdfminer,langchain,16228,16217,5413,0.333559,0.314061
+langchain.pdfplumber,langchain,16228,16217,2683,0.165332,0.134546
+langchain.pymupdf,langchain,16228,16225,4784,0.294799,0.274486
+langchain.pymupdf4llm,langchain,16228,16225,3322,0.204708,0.167365
+langchain.pypdf,langchain,16228,16216,5574,0.34348,0.324506
+langchain.pypdfium2,langchain,16228,16225,4915,0.302872,0.280345
+langchain.unstructured_fast,langchain,16228,16225,5165,0.318277,0.282939
+llamaindex.pdfloader,llamaindex,16228,16225,14052,0.865911,0.785807
+llamaindex.pymupdf,llamaindex,16228,16225,10821,0.66681,0.577642
+llamaindex.smartpdf,llamaindex,16228,16218,12215,0.752711,0.676815
+llmsherpa.default,llmsherpa,16228,16218,12216,0.752773,0.676831

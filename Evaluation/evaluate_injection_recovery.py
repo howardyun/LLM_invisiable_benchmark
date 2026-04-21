@@ -48,6 +48,7 @@ ATTACK_SUBCATEGORY_DISPLAY_ORDER = [
     "OCG",
     "Out-of-bound",
     "Zero Width",
+    "PDF Mirage",
     "Misaligned",
 ]
 ATTACK_SUBCATEGORY_ALIASES = {
@@ -58,6 +59,7 @@ ATTACK_SUBCATEGORY_ALIASES = {
     "ocg": "OCG",
     "out_of_bound": "Out-of-bound",
     "zero_width": "Zero Width",
+    "pdf_mirage": "PDF Mirage",
     "misaligned": "Misaligned",
 }
 METRIC_LABELS = {

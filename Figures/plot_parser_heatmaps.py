@@ -62,6 +62,9 @@ CSV_SPECS = [
         "parser_subcategory_recovery_completeness.png",
     ),
 ]
+ATTACK_SUBCATEGORY_LABELS = {
+    "pdf_mirage": "PDF Mirage",
+}
 CHINESE_FONT_CANDIDATES = [
     "Microsoft YaHei",
     "Microsoft JhengHei",
@@ -148,6 +151,8 @@ def load_parser_heatmap_csv(
             if parser_id in EXCLUDED_PARSER_IDS:
                 continue
             row_label = row[row_field]
+            if row_field == "attack_subcategory":
+                row_label = ATTACK_SUBCATEGORY_LABELS.get(row_label, row_label)
             metric_value = float((row.get(metric_field) or "0").strip())
 
             if parser_id not in grouped_values:

@@ -1,5 +1,0 @@
-attack_category,metric,haystack,langchain,llamaindex,llmsherpa
-Visual Hiding,隐式注入内容回复完整度,0.935398,0.168549,0.85111,0.724618
-Geometric Escape,隐式注入内容回复完整度,0.828062,0.112899,0.534358,0.744758
-Presentation Layer Encoding,隐式注入内容回复完整度,0.00927,0.001845,0.009066,0.0096
-Parsing Order/Multi-view Inconsistency,隐式注入内容回复完整度,0.400238,0.087493,0.423199,0.470071

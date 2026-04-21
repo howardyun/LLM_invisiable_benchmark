@@ -1,0 +1,37 @@
+framework,attack_subcategory,parser_count,attacked_sample_count,available_output_count,successful_sample_count,injection_parse_success_rate,avg_recovery_completeness
+haystack,Double Layer PDF,4,5788,5776,5241,0.905494,0.810211
+haystack,TRM,4,6736,6728,6714,0.996734,0.996747
+haystack,Zero Size,4,6736,6736,6223,0.923842,0.917165
+haystack,White text,4,6736,6736,6735,0.999852,0.999852
+haystack,OCG,4,6732,6724,4840,0.718954,0.656319
+haystack,Out-of-bound,4,6736,6736,6734,0.999703,0.999703
+haystack,Zero Width,4,6736,6736,274,0.040677,0.00927
+haystack,PDF Mirage,4,11976,11971,11929,0.996075,0.996075
+haystack,Misaligned,4,6736,6730,6730,0.999109,0.400238
+langchain,Double Layer PDF,8,11576,11564,2211,0.190999,0.162607
+langchain,TRM,8,13472,13466,2550,0.189281,0.184761
+langchain,Zero Size,8,13472,13470,2058,0.152761,0.136307
+langchain,White text,8,13472,13471,2838,0.210659,0.189686
+langchain,OCG,8,13464,13452,1692,0.125668,0.107483
+langchain,Out-of-bound,8,13472,13471,1642,0.121882,0.118311
+langchain,Zero Width,8,13472,13472,101,0.007497,0.001845
+langchain,PDF Mirage,8,23952,23944,20236,0.844856,0.825263
+langchain,Misaligned,8,13472,13464,2961,0.219789,0.087493
+llamaindex,Double Layer PDF,3,4341,4338,3882,0.894264,0.797934
+llamaindex,TRM,3,5052,5052,4723,0.934877,0.929174
+llamaindex,Zero Size,3,5052,5050,3502,0.693191,0.670839
+llamaindex,White text,3,5052,5051,5047,0.99901,0.99901
+llamaindex,OCG,3,5049,5048,2372,0.469796,0.404267
+llamaindex,Out-of-bound,3,5052,5049,3441,0.681116,0.664371
+llamaindex,Zero Width,3,5052,5052,200,0.039588,0.009066
+llamaindex,PDF Mirage,3,8982,8979,8938,0.995101,0.994651
+llamaindex,Misaligned,3,5052,5049,4983,0.986342,0.423199
+llmsherpa,Double Layer PDF,1,1447,1446,1247,0.861783,0.76434
+llmsherpa,TRM,1,1684,1684,1358,0.806413,0.798925
+llmsherpa,Zero Size,1,1684,1682,646,0.38361,0.343766
+llmsherpa,White text,1,1684,1683,1679,0.997031,0.997031
+llmsherpa,OCG,1,1683,1682,977,0.580511,0.505135
+llmsherpa,Out-of-bound,1,1684,1681,1660,0.985748,0.984239
+llmsherpa,Zero Width,1,1684,1684,69,0.040974,0.0096
+llmsherpa,PDF Mirage,1,2994,2993,2963,0.989646,0.988296
+llmsherpa,Misaligned,1,1684,1683,1617,0.960214,0.470071

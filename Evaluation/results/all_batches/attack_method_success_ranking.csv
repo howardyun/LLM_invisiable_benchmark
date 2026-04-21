@@ -1,9 +1,0 @@
-rank,attack_category,attack_method,attacked_sample_count,available_output_count,successful_sample_count,injection_parse_success_rate,avg_recovery_completeness
-1,Visual Hiding,White text,26944,26941,16299,0.604921,0.594435
-2,Parsing Order/Multi-view Inconsistency,Misaligned,26944,26926,16291,0.604624,0.252535
-3,Visual Hiding,TRM,26944,26930,15345,0.569515,0.56572
-4,Visual Hiding,Double Layer PDF,23152,23124,12581,0.543409,0.48124
-5,Geometric Escape,Out-of-bound,26944,26937,13477,0.500186,0.495166
-6,Visual Hiding,Zero Size,26944,26938,12429,0.46129,0.444712
-7,Geometric Escape,OCG,26928,26906,9881,0.366941,0.325192
-8,Presentation Layer Encoding,Zero Width,26944,26944,644,0.023901,0.00554
